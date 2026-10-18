@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { buildMenuItems, LIMITS, weight } from '../lib/menu.js'
 import { QqConsole, imageMimeFor, sniffImageMime } from '../lib/console.js'
 import { Store } from '../lib/store.js'
+import { Sessions } from '../lib/sessions.js'
 import {
   flattenCachedCatalog,
   flattenCatalog,
@@ -33,15 +34,15 @@ const row = (id, title, cwd, updated = 1, extra = {}) => ({
 
 const ROWS = [
   ...Array.from({ length: 9 }, (_, i) =>
-    row(`p1-${i}`, `项目一对话${i + 1}`, 'C:\\demo\\项目一', 100 - i)),
-  row('p2-1', '项目二对话', 'C:\\demo\\项目二', 90),
-  row('p3-1', '项目三对话', 'C:\\demo\\项目三', 80),
-  row('p4-1', '项目四对话', 'C:\\demo\\项目四', 70),
-  row('p5-1', '项目五对话', 'C:\\demo\\项目五', 60),
-  row('p6-1', '项目六对话', 'C:\\demo\\项目六', 50),
-  row('p7-1', '项目七对话', 'C:\\demo\\项目七', 40),
-  row('p8-1', '项目八对话', 'C:\\demo\\项目八', 30),
-  row('sub-1', '子会话', 'C:\\demo\\项目一', 20, { origin: 'subagent' }),
+    row(`p1-${i}`, `项目一对话${i + 1}`, 'F:\\Codex\\项目一', 100 - i)),
+  row('p2-1', '项目二对话', 'F:\\Codex\\项目二', 90),
+  row('p3-1', '项目三对话', 'F:\\Codex\\项目三', 80),
+  row('p4-1', '项目四对话', 'F:\\Codex\\项目四', 70),
+  row('p5-1', '项目五对话', 'F:\\Codex\\项目五', 60),
+  row('p6-1', '项目六对话', 'F:\\Codex\\项目六', 50),
+  row('p7-1', '项目七对话', 'F:\\Codex\\项目七', 40),
+  row('p8-1', '项目八对话', 'F:\\Codex\\项目八', 30),
+  row('sub-1', '子会话', 'F:\\Codex\\项目一', 20, { origin: 'subagent' }),
 ]
 
 test('菜单：最多 7 个项目 + 对话/设置/更多', () => {
@@ -91,8 +92,8 @@ test('菜单：项目内会话入口只写对话名', () => {
 
 test('菜单：同名会话附 8 位短 ID 消歧', () => {
   const items = buildMenuItems([
-    row('session-aaaa1111-0000-0000-0000-000000000001', '同名对话', 'C:\\demo\\演示', 2),
-    row('session-bbbb2222-0000-0000-0000-000000000002', '同名对话', 'C:\\demo\\演示', 1),
+    row('session-aaaa1111-0000-0000-0000-000000000001', '同名对话', 'F:\\Codex\\演示', 2),
+    row('session-bbbb2222-0000-0000-0000-000000000002', '同名对话', 'F:\\Codex\\演示', 1),
   ])
   const sub = items[0].sub_menu_items
   assert.equal(sub[0].send_message, '进入 同名对话 · aaaa1111')
@@ -125,7 +126,7 @@ function makeConsole({ running = false, rows = null, models = null } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'qq-console-v2-'))
   const store = new Store(dir, null)
   store.ensure()
-  const list = rows ?? [row('s1', '测试会话', 'C:\\demo\\演示', 5, { running })]
+  const list = rows ?? [row('s1', '测试会话', 'F:\\Codex\\演示', 5, { running })]
   const sent = []
   const gateway = {
     api: async (path, method, body) => {
@@ -182,7 +183,7 @@ const textOf = (sent) => {
 test('状态卡：8 行固定字段', async () => {
   const c = makeConsole()
   try {
-    c.store.bind(OPENID, 's1', { name: '测试会话', cwd: 'C:\\demo\\演示' })
+    c.store.bind(OPENID, 's1', { name: '测试会话', cwd: 'F:\\Codex\\演示' })
     await c.console_.viewState(OPENID)
     const text = textOf(c.sent)
     for (const key of ['当前项目', '当前对话', '当前任务', '排队任务', '汇报方式', '当前模型', '推理强度', '当前权限']) {
@@ -218,7 +219,7 @@ test('绑定卡：关闭档统一显示「强度0（关闭）」', async () => {
 
 test('会话列表：入口只写对话名，名称可直接绑定', async () => {
   const sid = 'session-58e9da59-5923-4ef6-a054-2eeea08316f4'
-  const c = makeConsole({ rows: [row(sid, '测试会话', 'C:\\demo\\演示', 5)] })
+  const c = makeConsole({ rows: [row(sid, '测试会话', 'F:\\Codex\\演示', 5)] })
   try {
     await c.console_.viewSessions(OPENID)
     const text = textOf(c.sent)
@@ -234,8 +235,8 @@ test('会话列表：同名对话附短 ID，点对应入口进对应会话', as
   const second = 'session-bbbb2222-0000-0000-0000-000000000002'
   const c = makeConsole({
     rows: [
-      row(first, 'AI助手身份询问', 'C:\\demo\\演示', 2),
-      row(second, 'AI助手身份询问', 'C:\\demo\\演示', 1),
+      row(first, 'AI助手身份询问', 'F:\\Codex\\演示', 2),
+      row(second, 'AI助手身份询问', 'F:\\Codex\\演示', 1),
     ],
   })
   try {
@@ -298,8 +299,8 @@ test('行内命令：当前对话卡带可点的对话状态/当前进度', asyn
 test('行内命令：项目卡项目名可点，并能按「项目 N · 名称」进入', async () => {
   const c = makeConsole({
     rows: [
-      row('s1', '测试会话', 'C:\\demo\\演示', 5),
-      row('s2', '另一个会话', 'C:\\demo\\其他', 4),
+      row('s1', '测试会话', 'F:\\Codex\\演示', 5),
+      row('s2', '另一个会话', 'F:\\Codex\\其他', 4),
     ],
   })
   try {
@@ -830,6 +831,52 @@ test('状态卡：off 与 full 都显示中文', async () => {
   } finally { c.cleanup() }
 })
 
+test('投递：page/prompt 都带 AbortSignal，不再 throwIfAborted', async () => {
+  let prompted = false
+  let requestId = ''
+  const controller = {
+    list: async () => [{ sessionId: 's1', title: '测试会话', running: false }],
+    page: async (_req, signal) => {
+      assert.equal(typeof signal?.throwIfAborted, 'function')
+      if (!prompted) return { records: [], asOfSeq: 0 }
+      return {
+        records: [{ type: 'user/message', seq: 1, data: { source: { rpcId: requestId } } }],
+        asOfSeq: 1,
+      }
+    },
+    prompt: async (req, signal) => {
+      assert.equal(typeof signal?.throwIfAborted, 'function')
+      signal.throwIfAborted()
+      requestId = req.requestId
+      prompted = true
+      return {}
+    },
+  }
+  const sessions = new Sessions({ get: (name) => (name === 'sessionController' ? controller : null) }, null)
+  const result = await sessions.deliver('s1', '介绍下自己')
+  assert.equal(result.ok, true)
+  assert.equal(result.userSeq, 1)
+  assert.equal(prompted, true)
+})
+
+test('强度：模型未声明 efforts 时只剩「默认」并拒绝 high', async () => {
+  const model = {
+    provider: 'workbuddy-ai',
+    model: 'deepseek-v4.1-flash',
+    full: 'Deepseek-V4.1-Flash',
+    effort: '',
+    efforts: [],
+  }
+  const c = makeConsole({ models: [model] })
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    assert.deepEqual(await c.console_.effortsFor(model), [''])
+    await c.console_.applyEffortValue(OPENID, 'high', model)
+    assert.match(textOf(c.sent), /不支持这个推理强度/)
+    assert.equal(c.console_.sessions.modelCalls.length, 0)
+  } finally { c.cleanup() }
+})
+
 // ---------------- 运行 ----------------
 
 let pass = 0
@@ -846,4 +893,3 @@ for (const [name, fn] of cases) {
 }
 console.log(`\n${pass} PASS / ${fail} FAIL`)
 process.exitCode = fail ? 1 : 0
-

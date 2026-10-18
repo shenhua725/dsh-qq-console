@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.17
+
+- Pass an `AbortSignal` to `sessionController.prompt()` and `page()`, fixing
+  `Cannot read properties of undefined (reading 'throwIfAborted')` on every
+  outbound message with newer DSH hosts.
+- Only offer reasoning efforts the selected model actually declares. Models
+  without a declared effort list now offer "default" only, and unsupported
+  values are rejected with a clear message instead of a host error.
+
 ## 2.2.16
 
 - Restore the original bottom menu: projects + 对话 + 设置 + 更多.
