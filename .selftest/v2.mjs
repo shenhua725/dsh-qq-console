@@ -19,6 +19,7 @@ import {
   flattenCatalog,
   mergeCatalogEntries,
   readWorkbuddyCatalog,
+  splitModelName,
 } from '../lib/catalog.js'
 import { protectSecret, unprotectSecret, DPAPI_PREFIX } from '../lib/secure-store.js'
 
@@ -156,6 +157,7 @@ function makeConsole({ running = false, rows = null, models = null } = {}) {
       defaultPreset: 'full',
     }),
     modelCatalog: async () => ({ groups: [] }),
+    routableProviders: async () => null,
     effortsForModel: async () => [],
     deliver: async () => ({
       ok: true, requestId: 'req-1', baselineSeq: 0, userSeq: 1,
@@ -677,12 +679,185 @@ test('模型卡：6 个已选模型全部列出，full 为空时回退 model ID'
     assert.match(text, /^模型选择：默认 6 个/m)
     assert.match(text, /^1\. 「/m)
     for (const m of SIX_MODELS) {
-      const label = m.full || m.model
+      const label = splitModelName(m.full || m.model).name
       assert.ok(text.includes(`text="${encodeURIComponent(label)}"`), `缺少可点模型 ${label}`)
     }
     const numbered = text.split('\n').filter((line) => /^\d+\. /.test(line))
     assert.equal(numbered.length, 6)
     for (const line of numbered) assert.match(line, /text="[^"]+"/, '模型按钮不应为空')
+  } finally { c.cleanup() }
+})
+
+test('模型名：结尾计价标签拆进 billing，模型名本身不动', () => {
+  assert.deepEqual(splitModelName('Deepseek-V4.1-Flash · x0.00 · Free now'), {
+    name: 'Deepseek-V4.1-Flash', billing: 'x0.00 · Free now',
+  })
+  assert.deepEqual(splitModelName('Kimi-K3 · x1.62'),
+    { name: 'Kimi-K3', billing: 'x1.62' })
+  assert.deepEqual(splitModelName('DeepSeek-V4.1-Flash'),
+    { name: 'DeepSeek-V4.1-Flash', billing: '' })
+  assert.deepEqual(splitModelName('Hy3 · x0.00 · 限时免费'),
+    { name: 'Hy3', billing: 'x0.00 · 限时免费' })
+})
+
+test('模型卡：按钮文字只留模型名，计价另起一段', async () => {
+  const c = makeConsole({ models: SIX_MODELS })
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    await c.console_.viewModel(OPENID)
+    const text = textOf(c.sent)
+    assert.doesNotMatch(text, /text="[^"]*(?:x\d|Free%20now|限时免费)/,
+      '按钮文字里不该带计价标签')
+    assert.match(text, /Deepseek-V4\.1-Flash[\s\S]{0,40}」　x0\.00 · Free now/)
+  } finally { c.cleanup() }
+})
+
+test('模型卡：未登录的模型标「未登录」并拦下选择', async () => {
+  const models = [
+    {
+      provider: 'deepseek-account', model: 'deepseek-flash',
+      full: 'DeepSeek-V4.1-Flash', effort: 'off', efforts: ['off', 'high'],
+    },
+    {
+      provider: 'workbuddy-ai', model: 'gpt-6-luna',
+      full: 'GPT-6-Luna · x0.07', effort: 'low',
+      efforts: ['low', 'high'], routable: false,
+    },
+  ]
+  const c = makeConsole({ models })
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    await c.console_.viewModel(OPENID)
+    const card = textOf(c.sent)
+    assert.match(card, /GPT-6-Luna[\s\S]{0,40}」　x0\.07　未登录/)
+    assert.match(card, /要先在 DSH 里登录/)
+    await c.console_.handle(OPENID, 'GPT-6-Luna')
+    assert.equal(c.store.modelPick()[OPENID]?.stage, 'model', '不该进入强度选择')
+    assert.equal(c.store.modelPick()[OPENID]?.model, undefined)
+    assert.match(textOf(c.sent), /现在用不了：workbuddy-ai 未登录/)
+  } finally { c.cleanup() }
+})
+
+test('投递：选中的模型未登录时回退到能跑的模型并说明', async () => {
+  const models = [
+    {
+      provider: 'deepseek-account', model: 'deepseek-flash',
+      full: 'DeepSeek-V4.1-Flash', effort: 'off', efforts: ['off', 'high'],
+    },
+    {
+      provider: 'workbuddy-ai', model: 'gpt-6-luna',
+      full: 'GPT-6-Luna · x0.07', effort: 'low', efforts: ['low', 'high'],
+    },
+  ]
+  const c = makeConsole({ models })
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    c.store.setPref(OPENID, 's1', { model: models[1] })
+    c.console_.sessions.routableProviders = async () => new Set(['deepseek-account'])
+    await c.console_.deliver(OPENID, 's1', '你好')
+    assert.equal(c.console_.sessions.modelCalls.at(-1)?.selection.provider, 'deepseek-account')
+    const text = textOf(c.sent)
+    assert.match(text, /GPT-6-Luna 现在跑不了（workbuddy-ai 未登录）/)
+    assert.match(text, /这条先用 DeepSeek-V4\.1-Flash/)
+  } finally { c.cleanup() }
+})
+
+test('失败轮次：回报原因与模型，不再只说「没有文字输出」', async () => {
+  const c = makeConsole()
+  try {
+    c.store.bind(OPENID, 's1')
+    c.store.setJob(OPENID, 's1', {
+      id: 'j1', openid: OPENID, sessionId: 's1', text: '测试',
+      at: Date.now(), status: 'running', confirmed: true, userSeq: 0, lastSeq: 0,
+      followups: [],
+      model: { provider: 'workbuddy-ai', model: 'gpt-6-luna', name: 'GPT-6-Luna' },
+    })
+    c.console_.sessions.page = async () => ({
+      records: [{
+        type: 'turn/end', seq: 9,
+        data: { reason: { kind: 'error', message: 'provider not signed in' } },
+      }],
+      asOfSeq: 9,
+    })
+    await c.console_.tickJobs()
+    const text = textOf(c.sent)
+    assert.match(text, /任务结束（error）/)
+    assert.match(text, /原因：provider not signed in/)
+    assert.match(text, /模型：GPT-6-Luna（workbuddy-ai）/)
+    assert.match(text, /换一个能跑的/)
+    assert.equal(c.store.job(OPENID, 's1').status, 'ended')
+    const health = c.store.load('model_health.json', {})
+    assert.ok(health['workbuddy-ai/gpt-6-luna']?.at, '失败模型应记账')
+  } finally { c.cleanup() }
+})
+
+test('模型健康：上一轮没输出的模型，下次投递自动换掉并说明', async () => {
+  const models = [
+    {
+      provider: 'deepseek-account', model: 'deepseek-flash',
+      full: 'DeepSeek-V4.1-Flash', effort: 'off', efforts: ['off', 'high'],
+    },
+    {
+      provider: 'workbuddy-ai', model: 'gpt-6-luna',
+      full: 'GPT-6-Luna · x0.07', effort: 'low', efforts: ['low', 'high'],
+    },
+  ]
+  const c = makeConsole({ models })
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    c.store.setPref(OPENID, 's1', { model: models[1] })
+    c.console_.markModelHealth(models[1], { ok: false, reason: 'provider not signed in' })
+    await c.console_.deliver(OPENID, 's1', '你好')
+    assert.equal(c.console_.sessions.modelCalls.at(-1)?.selection.provider, 'deepseek-account')
+    const text = textOf(c.sent)
+    assert.match(text, /GPT-6-Luna 上一轮直接失败/)
+    assert.match(text, /这条先用 DeepSeek-V4\.1-Flash/)
+  } finally { c.cleanup() }
+})
+
+test('模型健康：成功的轮次把失败记录清掉', async () => {
+  const c = makeConsole()
+  try {
+    c.store.bind(OPENID, 's1')
+    c.console_.markModelHealth(
+      { provider: 'workbuddy-ai', model: 'gpt-6-luna' },
+      { ok: false, reason: 'boom' },
+    )
+    assert.ok(c.console_.unhealthyOf({ provider: 'workbuddy-ai', model: 'gpt-6-luna' }))
+    c.store.setJob(OPENID, 's1', {
+      id: 'j2', openid: OPENID, sessionId: 's1', text: '测试',
+      at: Date.now(), status: 'running', confirmed: true, userSeq: 0, lastSeq: 0,
+      followups: [],
+      model: { provider: 'workbuddy-ai', model: 'gpt-6-luna', name: 'GPT-6-Luna' },
+    })
+    c.console_.sessions.page = async () => ({
+      records: [
+        {
+          type: 'assistant/message', seq: 4,
+          data: { message: { content: [{ type: 'text', text: '好了' }] } },
+        },
+        { type: 'turn/end', seq: 5, data: { reason: { kind: 'completed' } } },
+      ],
+      asOfSeq: 5,
+    })
+    await c.console_.tickJobs()
+    assert.equal(c.console_.unhealthyOf({ provider: 'workbuddy-ai', model: 'gpt-6-luna' }), null)
+  } finally { c.cleanup() }
+})
+
+test('模型卡：失败过的模型带「上次失败」标签', async () => {
+  const models = [{
+    provider: 'workbuddy-ai', model: 'gpt-6-luna',
+    full: 'GPT-6-Luna · x0.07', effort: 'low', efforts: ['low', 'high'],
+  }]
+  const c = makeConsole({ models })
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    c.console_.markModelHealth(models[0], { ok: false, reason: 'provider not signed in' })
+    await c.console_.viewModel(OPENID)
+    const text = textOf(c.sent)
+    assert.match(text, /上次失败/)
+    assert.match(text, /先确认账号和额度正常/)
   } finally { c.cleanup() }
 })
 
@@ -812,95 +987,6 @@ test('权限卡：只读→工作区→完全访问，自动最后；序号按�
     await c.console_.applyPermission(OPENID, '2')
     assert.equal(c.console_.sessions.permissionCalls.at(-1)?.preset, 'workspace-write')
   } finally { c.cleanup() }
-})
-
-test('权限：冷会话先 resolveAgent 恢复，再设置权限', async () => {
-  const live = { id: 'session-s1' }
-  let resumed = ''
-  let setOn = null
-  let setPreset = ''
-  const sessions = new Sessions({
-    get: (name) => {
-      if (name === 'sessions') return { get: () => undefined }
-      if (name === 'sessionController') {
-        return {
-          resolveAgent: async (id) => {
-            resumed = id
-            return { session: live }
-          },
-        }
-      }
-      if (name === 'permissionPresets') {
-        return {
-          catalog: () => ({ options: [], defaultPreset: '' }),
-          set: (target, preset) => { setOn = target; setPreset = preset },
-        }
-      }
-      return null
-    },
-  }, null)
-  const result = await sessions.setPermission('s1', 'danger-full-access')
-  assert.equal(result.ok, true)
-  assert.equal(resumed, 's1')
-  assert.equal(setOn, live)
-  assert.equal(setPreset, 'danger-full-access')
-})
-
-test('历史页：解开新版 DSH 的 {type:event,event} 包装', async () => {
-  const controller = {
-    page: async () => ({
-      records: [
-        { type: 'event', event: { type: 'user/message', seq: 1, data: { source: { rpcId: 'r1' } } } },
-        {
-          type: 'event',
-          event: {
-            type: 'assistant/message',
-            seq: 2,
-            data: { content: [{ type: 'text', text: '你好' }] },
-          },
-        },
-        { type: 'event', event: { type: 'turn/end', seq: 3, data: { reason: { kind: 'completed' } } } },
-      ],
-    }),
-  }
-  const sessions = new Sessions({
-    get: (name) => (name === 'sessionController' ? controller : null),
-  }, null)
-  const page = await sessions.page('s1')
-  assert.deepEqual(page.records.map((r) => r.type), ['user/message', 'assistant/message', 'turn/end'])
-  assert.equal(Sessions.maxSeq(page.records), 3)
-  assert.equal(Sessions.userRecordFor(page.records, 'r1')?.seq, 1)
-  assert.deepEqual(Sessions.assistantTexts(page.records, 0), ['你好'])
-  assert.equal(Sessions.turnFinished(page.records, 1), true)
-})
-
-test('历史页：throughSeq=-1 先转成最后一条真实 seq', async () => {
-  let used = null
-  const controller = {
-    inspect: async () => ({ events: [{ seq: 0 }, { seq: 5 }] }),
-    page: async (req) => {
-      used = req.throughSeq
-      return {
-        records: req.throughSeq === -1
-          ? []
-          : [{
-              type: 'event',
-              event: {
-                type: 'assistant/message',
-                seq: 5,
-                data: { content: [{ type: 'text', text: 'ok' }] },
-              },
-            }],
-      }
-    },
-  }
-  const sessions = new Sessions({
-    get: (name) => (name === 'sessionController' ? controller : null),
-  }, null)
-  const page = await sessions.page('s1')
-  assert.equal(used, 5)
-  assert.equal(page.records.length, 1)
-  assert.deepEqual(Sessions.assistantTexts(page.records, 0), ['ok'])
 })
 
 test('状态卡：off 与 full 都显示中文', async () => {

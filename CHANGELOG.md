@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.2.26
+
+- Strip the host's billing suffix (`· x0.00 · Free now`, `· 限时免费`, …) from
+  model names. It used to be baked into the model button text, so tapping a
+  model sent the price string back as a task, and the effort card read
+  "推理强度：Deepseek-V4.1-Flash · x0.00 · Free now". Price now shows as a
+  separate hint after the name.
+- Remember model-level failures: a turn that ends with an error and no text at
+  all marks that provider/model. The next delivery switches to a model without
+  a failure record and says so in the receipt. A successful turn clears the
+  mark, so signing the provider back in heals it automatically.
+- Report why a turn failed: the end-of-task card now carries the host's
+  `turn/end` reason, the model that ran it, and a one-tap way back to the model
+  picker. It used to say only "这一轮没有文字输出".
+- Mark models the host does not list as routable with `未登录` and refuse to
+  select them, instead of letting every following task fail silently.
+
 ## 2.2.25
 
 - Resolve `throughSeq: -1` to the session's last real seq before calling the
