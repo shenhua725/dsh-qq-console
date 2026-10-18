@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.25
+
+- Resolve `throughSeq: -1` to the session's last real seq before calling the
+  current DSH `session/page`. The new API treats `-1` as "before seq 0" and
+  otherwise returns an empty page, which made every QQ task look stuck even
+  though the assistant had already answered.
+
 ## 2.2.24
 
 - Log the raw `session/page` response shape when it yields no records.

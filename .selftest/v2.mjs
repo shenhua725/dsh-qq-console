@@ -874,6 +874,35 @@ test('历史页：解开新版 DSH 的 {type:event,event} 包装', async () => {
   assert.equal(Sessions.turnFinished(page.records, 1), true)
 })
 
+test('历史页：throughSeq=-1 先转成最后一条真实 seq', async () => {
+  let used = null
+  const controller = {
+    inspect: async () => ({ events: [{ seq: 0 }, { seq: 5 }] }),
+    page: async (req) => {
+      used = req.throughSeq
+      return {
+        records: req.throughSeq === -1
+          ? []
+          : [{
+              type: 'event',
+              event: {
+                type: 'assistant/message',
+                seq: 5,
+                data: { content: [{ type: 'text', text: 'ok' }] },
+              },
+            }],
+      }
+    },
+  }
+  const sessions = new Sessions({
+    get: (name) => (name === 'sessionController' ? controller : null),
+  }, null)
+  const page = await sessions.page('s1')
+  assert.equal(used, 5)
+  assert.equal(page.records.length, 1)
+  assert.deepEqual(Sessions.assistantTexts(page.records, 0), ['ok'])
+})
+
 test('状态卡：off 与 full 都显示中文', async () => {
   const c = makeConsole()
   try {
