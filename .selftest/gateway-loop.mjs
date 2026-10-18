@@ -71,5 +71,18 @@ function makeGateway() {
   check('重复 start() 不会叠加连接循环', calls <= 3, `calls=${calls}`)
 }
 
+// [4] stop() 必须立即销毁 socket，不能留下僵尸连接
+{
+  const { gw } = makeGateway()
+  let destroyed = false
+  let closed = false
+  gw.ws = {
+    destroy() { destroyed = true },
+    close() { closed = true },
+  }
+  gw.stop()
+  check('stop() 立即销毁旧 socket', destroyed && !closed, `destroyed=${destroyed} closed=${closed}`)
+}
+
 console.log(failures === 0 ? '\n全部通过' : `\n${failures} 项失败`)
 process.exit(failures === 0 ? 0 : 1)

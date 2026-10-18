@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.19
+
+- Destroy the previous gateway socket immediately on stop or replacement, so a
+  reconnect can no longer leave two QQ gateway connections receiving the same
+  message and replying twice.
+- Keep a process-wide single active gateway across DSH plugin reloads. When a
+  new module instance boots after a profile rebuild, it stops the previous
+  instance's gateway before connecting.
+
 ## 2.2.18
 
 - Deduplicate inbound QQ messages by `msg_id`, so a message delivered twice
