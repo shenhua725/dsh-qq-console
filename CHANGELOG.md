@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.20
+
+- Resolve a cold session through `sessionController.resolveAgent()` before
+  changing its permission preset. After a DSH restart, persisted sessions are
+  not in the live session registry, so permission changes previously failed
+  with "DSH 权限服务不可用，或会话当前不在运行栈中".
+
 ## 2.2.19
 
 - Destroy the previous gateway socket immediately on stop or replacement, so a

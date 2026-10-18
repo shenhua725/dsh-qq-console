@@ -814,6 +814,38 @@ test('权限卡：只读→工作区→完全访问，自动最后；序号按�
   } finally { c.cleanup() }
 })
 
+test('权限：冷会话先 resolveAgent 恢复，再设置权限', async () => {
+  const live = { id: 'session-s1' }
+  let resumed = ''
+  let setOn = null
+  let setPreset = ''
+  const sessions = new Sessions({
+    get: (name) => {
+      if (name === 'sessions') return { get: () => undefined }
+      if (name === 'sessionController') {
+        return {
+          resolveAgent: async (id) => {
+            resumed = id
+            return { session: live }
+          },
+        }
+      }
+      if (name === 'permissionPresets') {
+        return {
+          catalog: () => ({ options: [], defaultPreset: '' }),
+          set: (target, preset) => { setOn = target; setPreset = preset },
+        }
+      }
+      return null
+    },
+  }, null)
+  const result = await sessions.setPermission('s1', 'danger-full-access')
+  assert.equal(result.ok, true)
+  assert.equal(resumed, 's1')
+  assert.equal(setOn, live)
+  assert.equal(setPreset, 'danger-full-access')
+})
+
 test('状态卡：off 与 full 都显示中文', async () => {
   const c = makeConsole()
   try {
