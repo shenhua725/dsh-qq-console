@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.18
+
+- Deduplicate inbound QQ messages by `msg_id`, so a message delivered twice
+  (for example by an orphaned gateway connection) no longer produces two replies.
+- Keep inline command labels in the plain-text fallback instead of stripping the
+  tags and leaving empty `「」` placeholders.
+- Destroy gateway sockets after a failed close handshake and reject stale
+  WebSocket upgrades, preventing old connections from surviving a reconnect.
+
 ## 2.2.17
 
 - Pass an `AbortSignal` to `sessionController.prompt()` and `page()`, fixing

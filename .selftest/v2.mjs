@@ -877,6 +877,39 @@ test('强度：模型未声明 efforts 时只剩「默认」并拒绝 high', asy
   } finally { c.cleanup() }
 })
 
+test('消息去重：同一 msg_id 只处理一次', async () => {
+  const c = makeConsole()
+  try {
+    c.store.bind(OPENID, 's1', { name: '测试会话' })
+    await c.console_.onMessage({ openid: OPENID, content: '当前', msgId: 'dup-1' })
+    const first = c.sent.length
+    assert.ok(first >= 1)
+    await c.console_.onMessage({ openid: OPENID, content: '当前', msgId: 'dup-1' })
+    assert.equal(c.sent.length, first)
+  } finally { c.cleanup() }
+})
+
+test('纯文本兜底：命令标签保留模型名，不出现空引号', async () => {
+  const c = makeConsole()
+  try {
+    const bodies = []
+    c.console_.attach({
+      api: async (_path, _method, body) => {
+        bodies.push(body)
+        return body.msg_type === 2
+          ? { status: 400, body: {} }
+          : { status: 200, body: { id: 'fallback-1' } }
+      },
+    })
+    const text = '1. 「<qqbot-cmd-enter text="DeepSeek-V4.1-Flash" />」 默认 · 当前'
+    assert.equal(await c.console_.send(OPENID, text, { md: true }), true)
+    const plain = bodies.at(-1)
+    assert.equal(plain.msg_type, 0)
+    assert.match(plain.content, /DeepSeek-V4\.1-Flash/)
+    assert.doesNotMatch(plain.content, /「」/)
+  } finally { c.cleanup() }
+})
+
 // ---------------- 运行 ----------------
 
 let pass = 0
