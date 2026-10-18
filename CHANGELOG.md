@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.24
+
+- Log the raw `session/page` response shape when it yields no records.
+
 ## 2.2.23
 
 - Write `session/page` failures to the bridge log. A failed page used to be
