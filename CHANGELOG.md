@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.23
+
+- Write `session/page` failures to the bridge log. A failed page used to be
+  swallowed into an empty record list, which looked like a task that never
+  finished.
+
 ## 2.2.22
 
 - Log the loaded plugin version and a one-shot page diagnostic (record count,
