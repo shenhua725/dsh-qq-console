@@ -846,6 +846,34 @@ test('权限：冷会话先 resolveAgent 恢复，再设置权限', async () => 
   assert.equal(setPreset, 'danger-full-access')
 })
 
+test('历史页：解开新版 DSH 的 {type:event,event} 包装', async () => {
+  const controller = {
+    page: async () => ({
+      records: [
+        { type: 'event', event: { type: 'user/message', seq: 1, data: { source: { rpcId: 'r1' } } } },
+        {
+          type: 'event',
+          event: {
+            type: 'assistant/message',
+            seq: 2,
+            data: { content: [{ type: 'text', text: '你好' }] },
+          },
+        },
+        { type: 'event', event: { type: 'turn/end', seq: 3, data: { reason: { kind: 'completed' } } } },
+      ],
+    }),
+  }
+  const sessions = new Sessions({
+    get: (name) => (name === 'sessionController' ? controller : null),
+  }, null)
+  const page = await sessions.page('s1')
+  assert.deepEqual(page.records.map((r) => r.type), ['user/message', 'assistant/message', 'turn/end'])
+  assert.equal(Sessions.maxSeq(page.records), 3)
+  assert.equal(Sessions.userRecordFor(page.records, 'r1')?.seq, 1)
+  assert.deepEqual(Sessions.assistantTexts(page.records, 0), ['你好'])
+  assert.equal(Sessions.turnFinished(page.records, 1), true)
+})
+
 test('状态卡：off 与 full 都显示中文', async () => {
   const c = makeConsole()
   try {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.21
+
+- Unwrap `{ type: "event", event }` records returned by the current DSH
+  `session/page` API. Without this, the console could not find the user prompt,
+  assistant reply, or `turn/end`, so a task stayed "running" forever and kept
+  sending progress messages even though DSH had already answered.
+
 ## 2.2.20
 
 - Resolve a cold session through `sessionController.resolveAgent()` before
