@@ -1,0 +1,8 @@
+# DSH QQ 控制台 2.0：注册为独立插件。
+#
+# 它带自己的宿主半（QQ 网关客户端 + 投递 + 看门狗）和客户端半（设置卡片）。
+# AppID / AppSecret 走设置卡片：AppID 落盘，AppSecret 用 Windows DPAPI 加密后落盘；
+# 不写本文件，也不写 DSH 凭据存储。
+- insert:
+    - id: qq-console-v2
+      name: dsh-qq-console-v2
