@@ -1,6 +1,6 @@
 # DSH QQ Console
 
-[![Tests](https://img.shields.io/badge/tests-47%20passed-brightgreen.svg)](#开发与测试)
+[![CI](https://github.com/shenhua725/dsh-qq-console/actions/workflows/ci.yml/badge.svg)](https://github.com/shenhua725/dsh-qq-console/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%5E22.19%20%7C%7C%20%3E%3D24-brightgreen.svg)](package.json)
 
