@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.22
+
+- Log the loaded plugin version and a one-shot page diagnostic (record count,
+  max seq, recent record types) to the bridge log, so a mismatch between the
+  installed files and the running DSH process is visible.
+- Route watchdog tick failures to the bridge log instead of only the host
+  logger.
+
 ## 2.2.21
 
 - Unwrap `{ type: "event", event }` records returned by the current DSH
