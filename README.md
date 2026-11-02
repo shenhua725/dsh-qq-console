@@ -22,12 +22,27 @@
   权限档位直接读 DSH `permissionPresets`。
 - **凭据持久化**：AppID 落盘；AppSecret 用 Windows DPAPI 加密后落盘，
   永不回显。重启 DSH / 插件重载后自动恢复并尝试连接。
-- **闲时闸门**：工作日 9:00–12:00、14:00–18:00 与 8:30–9:00、13:30–14:00 不直接
-  外派，进闲时队列，到点自动放行；周末全天可跑。
+- **闲时闸门（可开关）**：工作日 9:00–12:00、14:00–18:00 与 8:30–9:00、
+  13:30–14:00 不直接外派，进闲时队列，到点自动放行；周末全天可跑。
+  设置卡片可以随时关掉闸门（关掉后任何时间都立即外派）。法定节假日和调休
+  上班日按官方日历自动识别，不再只看周六/周日。
+- **节假日自动更新**：从 holiday-cn（国务院放假通知整理）拉取今年和明年数据，
+  缓存到 `~/.dsh/qq-console-v2/holidays.json`；每 6 小时检查一次、每天最多
+  刷新一次，跨年自动补下一年。网络失败继续用旧缓存，设置页显示数据日期、
+  今日状态和最近错误，也可手动「刷新节假日」。
 - **附件**：QQ 图片走 DSH 原生图片输入（`session/prompt` 的 image content）。
   MIME 按「文件魔数 > QQ 声明类型 > 扩展名」判定，缺 `content_type` 的 JPEG 不会被
   误标成 PNG。DSH 只接受 PNG/JPEG/WebP/GIF，BMP/HEIC/AVIF/TIFF 会落盘到状态目录
   `inbox/` 并把绝对路径写进指令；其它文件同样落盘交路径。
+- **语音条先转写再路由**：手机语音条（SILK v3 / amr / wav 等）先在本地离线
+  转写成文字（silk 解码 → ffmpeg 16k wav → whisper.cpp），回执
+  「🎤 语音已转写（本地离线，未消耗 token）」后，文字按普通消息走同一套路由；
+  音频原件不投给模型。转写失败会提示重发或改发文字。设置卡片可关闭该功能。
+- **把文件/视频发回手机**：任务结果里出现本地附件路径（`[[QQ文件: 路径]]`、
+  Markdown 链接、反引号或单独一行绝对路径）时，插件自动走 QQ 官方分片上传
+  （`upload_prepare → 分片 PUT → files 合并 → msg_type 7`）发回手机；也可以
+  在手机上发「发送文件 F:\完整路径\成片.mp4」。支持图片、视频、语音和普通文件，
+  单文件默认上限 200MB。结果超过 2500 字时另发一份 txt，保证内容不丢。
 
 ## 安装
 
@@ -59,6 +74,8 @@ C:\Users\<你>\.dsh\profiles\desktop\vendor\dsh-qq-console-v2
 4. 再到「插件 → DSH QQ 控制台 2.2」：
    - 填 AppID / AppSecret，点「保存并连接」；
    - 从模型目录添加可选模型，设置每项的推理强度；第一项是默认；
+   - 「运行设置」里可以开关闲时闸门、开关语音条本地转写，查看节假日数据
+     年份/更新时间并手动刷新；
    - 点「立即刷新菜单」，确认底部菜单变成 7 项目 + 对话/设置/更多。
 
 设置页保存后会立即重连网关并显示真实连接结果，不必再重启。**以后重启 DSH
@@ -105,7 +122,26 @@ WorkBuddy 缓存模型来自 `~/.dsh/.workbuddy-ai-catalog.json`。未登录 Wor
 - 旧插件 `dsh-qq-console-plugin` 与本插件可以并存，但不要同时启用并填同一个 AppID。
 - 电脑端界面直接发起的轮次，DSH 能看见状态，也能用「打断重发」取消；
   「引导」只对正在运行的轮次有效，空闲时会提示直接发文字。
-- 法定节假日按周末处理需要人工判断；当前闸门只自动识别周六/周日。
+
+### 富媒体常见报错
+
+- `11253` / `40034105`：机器人没有开通 C2C 富媒体/文件能力，需要到 QQ 开放平台申请。
+- `40093001` / `40093006`：上传合并通道瞬时抖动，插件会自动退避重试 3 次；
+  仍失败时稍后重发即可，不是“找不到文件”。
+- `40093002`：当天文件上传容量已满，第二天再试。
+- `40011000`：媒体消息参数或被动态窗口被拒；先确认平台富媒体能力，再重发。
+
+语音转写工具默认路径：
+
+```text
+F:\Codex\技能安装\bin\silk_v3_decoder.exe
+F:\Codex\技能安装\bin\ffmpeg.exe
+F:\Codex\VoiceASR\bin\Release\whisper-cli.exe
+F:\Codex\VoiceASR\models\ggml-large-v3-turbo-q5_0.bin
+```
+
+设置卡片会显示「本地转写工具就绪 / 缺哪些文件」。语音转写全部在本机完成，
+不调用云端接口，也不消耗模型 token。
 
 ## 自检
 
@@ -127,6 +163,8 @@ $env:DSH_QQ_PLUGIN_DIR = "C:\Users\<你>\.dsh\profiles\desktop\vendor\dsh-qq-con
 - `lib/catalog.js` — DSH 实时模型目录与 WorkBuddy 缓存目录归一化
 - `lib/secure-store.js` — Windows DPAPI 凭据加密/解密
 - `lib/gateway.js` — QQ 网关 WebSocket + REST
+- `lib/holidays.js` — 中国法定节假日缓存与闲时判定
+- `lib/voice.js` — SILK/amr 语音本地转写（silk + ffmpeg + whisper.cpp）
 - `lib/console.js` — 指令路由、任务、排队、状态、模型/权限
 - `lib/menu.js` — 底部菜单构建与刷新
 - `lib/sessions.js` — DSH 会话/模型/权限窄接口
